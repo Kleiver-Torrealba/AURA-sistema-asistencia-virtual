@@ -46,7 +46,7 @@ Si deseas probar **AURA** en tu entorno local, sigue estos pasos:
    git clone [https://github.com/Kleiver-Torrealba/AURA-sistema-asistencia-virtual.git](https://github.com/Kleiver-Torrealba/AURA-sistema-asistencia-virtual.git)
    cd AURA-sistema-asistencia-virtual
 
-2. # Crear el entorno virtual
+2. #Crear el entorno virtual
 python -m venv env
 
 # Activar el entorno (En Windows)
