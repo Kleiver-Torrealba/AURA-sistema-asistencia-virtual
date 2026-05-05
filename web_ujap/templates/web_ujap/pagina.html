@@ -322,13 +322,27 @@
     <div class="container">
         <div class="main-content">
             <div class="selector-bar">
-                <div class="periodo-badge"><i class="fa-solid fa-calendar-days"></i> PERÍODO: 20261CR</div>
-                <select class="seccion-select" id="seccion-select" onchange="cambiarSeccion(this.value)">
-                    <option value="10211">Sección 10211</option>
-                    <option value="10212" selected>Sección 10212</option>
-                    <option value="10213">Sección 10213</option>
-                </select>
-            </div>
+    <div class="periodo-badge">
+        <i class="fa-solid fa-calendar-days"></i> PERÍODO: 20261CR
+    </div>
+ 
+    <select class="seccion-select"
+            id="seccion-select"
+            onchange="cambiarSeccion(this.value)">
+
+            {% if seccion_inicial == 'MIS_CLASES' %}
+    <option value="MIS_CLASES" selected>⭐ Mis Clases</option>
+    {% endif %}
+    
+        {% for sec in secciones %}
+            <option value="{{ sec.codigo }}"
+                {% if sec.codigo == seccion_inicial %}selected{% endif %}>
+                Sección {{ sec.codigo }}
+            </option>
+        {% endfor %}
+    </select>
+</div>
+ 
 
             <div class="aura-card">
                 <div class="card-header">
@@ -360,51 +374,124 @@
             {% endif %}
         </div>
 
-        <div class="sidebar">
-            <div class="aura-card">
-                <div class="card-header"><i class="fa-solid fa-clock"></i> PRÓXIMA CLASE</div>
-                <div class="stat-bd">
-                    <div class="prox-mat" id="prox-mat">---</div>
-                    <div style="font-size: 0.7rem; color: var(--text-muted);" id="prox-cod">---</div>
-                    <div class="prox-hora" id="prox-hora">00:00</div>
-                    <div style="font-size: 0.75rem; color: var(--accent-blue); font-weight: 700;">
-                        <i class="fa-solid fa-bolt"></i> PRÓXIMAMENTE
-                    </div>
+{# ══ SIDEBAR ════════════════════════════════════════════════════════════════ #}
+<div class="sidebar">
+ 
+    {# ── PRÓXIMA CLASE ───────────────────────────────────────────────────── #}
+    <div class="aura-card">
+        <div class="card-header">
+            <i class="fa-solid fa-clock"></i> PRÓXIMA CLASE
+        </div>
+        <div class="stat-bd">
+            {% if prox_materia %}
+                <div class="prox-mat" id="prox-mat">{{ prox_materia }}</div>
+                <div style="font-size:0.7rem; color:var(--text-muted);" id="prox-cod">
+                    {{ prox_codigo }}
                 </div>
-            </div>
-
-            <div class="aura-card">
-                <div class="card-header"><i class="fa-solid fa-user-xmark"></i> FALTAS SEMANALES</div>
-                <div class="stat-bd">
-                    <div class="fn orange">3 <span style="font-size: 1rem; color: var(--text-dim);">/ 10</span></div>
-                    <div class="bar-bg"><div class="bar-fill orange" style="width:30%"></div></div>
+                <div class="prox-hora" id="prox-hora">{{ prox_hora }}</div>
+                <div style="font-size:0.75rem; color:var(--accent-blue); font-weight:700; margin-top:6px;">
+                    <i class="fa-solid fa-bolt"></i>
+                    <span id="countdown-label">PRÓXIMAMENTE</span>
                 </div>
-            </div>
-
-            <div class="aura-card">
-                <div class="card-header"><i class="fa-solid fa-triangle-exclamation"></i> LÍMITE TOTAL</div>
-                <div class="stat-bd">
-                    <div class="fn red">30 <span style="font-size: 1rem; color: var(--text-dim);">/ 50</span></div>
-                    <div class="bar-bg"><div class="bar-fill red" style="width:60%"></div></div>
+                {# Pasamos los segundos restantes al JS #}
+                <div id="countdown-data"
+                     data-segundos="{{ prox_segundos }}"
+                     style="display:none;"></div>
+            {% else %}
+                <div class="prox-mat" id="prox-mat" style="color:var(--text-dim);">
+                    Sin clases
                 </div>
-            </div>
-
-            {# ── Panel rápido del PROFESOR ───────────────────────────────── #}
-            {% if request.user.es_profesor %}
-            <div class="aura-card">
-                <div class="card-header"><i class="fa-solid fa-chalkboard-user"></i> PANEL PROFESOR</div>
-                <div class="stat-bd">
-                    <p style="color: var(--text-dim); font-size: 0.85rem; margin-bottom: 15px;">
-                        Generá el código QR para que tus estudiantes registren su asistencia.
-                    </p>
-                    <a href="{% url 'dashboard:iniciar_sesion' %}" class="btn-iniciar-clase" style="justify-content: center; width: 100%;">
-                        <i class="fa-solid fa-qrcode"></i> INICIAR CLASE
-                    </a>
+                <div style="font-size:0.7rem; color:var(--text-muted);">
+                    No hay horario disponible
                 </div>
-            </div>
+                <div class="prox-hora" id="prox-hora">--:--</div>
             {% endif %}
         </div>
     </div>
+ 
+    {# ── FALTAS SEMANALES ────────────────────────────────────────────────── #}
+    <div class="aura-card">
+        <div class="card-header">
+            <i class="fa-solid fa-user-xmark"></i> FALTAS SEMANALES
+        </div>
+        <div class="stat-bd">
+            {% if request.user.es_estudiante %}
+                <div class="fn orange">
+                    {{ faltas_semanales }}
+                    <span style="font-size:1rem; color:var(--text-dim);">
+                        / {{ limite_semanal }}
+                    </span>
+                </div>
+                <div class="bar-bg">
+                    <div class="bar-fill orange"
+                         style="width: {{ porc_semanal }}%">
+                    </div>
+                </div>
+                {% if faltas_semanales >= limite_semanal %}
+                    <div style="font-size:0.75rem; color:#f87171; margin-top:8px; font-weight:600;">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                        Límite semanal alcanzado
+                    </div>
+                {% endif %}
+            {% else %}
+                <div style="color:var(--text-dim); font-size:0.85rem;">
+                    Solo visible para estudiantes.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+ 
+    {# ── LÍMITE TOTAL ────────────────────────────────────────────────────── #}
+    <div class="aura-card">
+        <div class="card-header">
+            <i class="fa-solid fa-triangle-exclamation"></i> LÍMITE TOTAL
+        </div>
+        <div class="stat-bd">
+            {% if request.user.es_estudiante %}
+                <div class="fn red">
+                    {{ faltas_totales }}
+                    <span style="font-size:1rem; color:var(--text-dim);">
+                        / {{ limite_total }}
+                    </span>
+                </div>
+                <div class="bar-bg">
+                    <div class="bar-fill red"
+                        style="width: {{ porc_total }}%">
+                    </div>
+                </div>
+                {% if faltas_totales >= limite_total %}
+                    <div style="font-size:0.75rem; color:#f87171; margin-top:8px; font-weight:600;">
+                        <i class="fa-solid fa-circle-exclamation"></i>
+                        Límite total alcanzado
+                    </div>
+                {% endif %}
+            {% else %}
+                <div style="color:var(--text-dim); font-size:0.85rem;">
+                    Solo visible para estudiantes.
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {# ── Panel rápido del PROFESOR ───────────────────────────────────────── #}
+    {% if request.user.es_profesor %}
+    <div class="aura-card">
+        <div class="card-header">
+            <i class="fa-solid fa-chalkboard-user"></i> PANEL PROFESOR
+        </div>
+        <div class="stat-bd">
+            <p style="color:var(--text-dim); font-size:0.85rem; margin-bottom:15px;">
+                Generá el código QR para que tus estudiantes registren su asistencia.
+            </p>
+            <a href="{% url 'dashboard:iniciar_sesion' %}"
+            class="btn-iniciar-clase"
+            style="justify-content:center; width:100%;">
+                <i class="fa-solid fa-qrcode"></i> INICIAR CLASE
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
 </div>
 
 {# ── TAB HORARIOS ──────────────────────────────────────────────────────────── #}
@@ -449,12 +536,13 @@ function cambiarPestana(evento, idPestana) {
     document.getElementById(idPestana).classList.add('active');
     evento.currentTarget.classList.add('active');
 }
+ 
 
 // ── Horario ─────────────────────────────────────────────────────────────────
 const HORARIOS_DB = {{ horarios_json|safe }};
-const horas = [...new Set(HORARIOS_DB.map(h => h.inicio))].sort();
-const dias  = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
-
+ 
+const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+ 
 function getKey(codigo) {
     if (codigo.startsWith('ALI')) return 'algebra';
     if (codigo.startsWith('MAI')) return 'mat';
@@ -463,31 +551,90 @@ function getKey(codigo) {
     if (codigo.startsWith('FIS')) return 'fisica';
     return 'mat';
 }
-
+ 
 function renderHorario(seccion) {
-    const tbody = document.getElementById('horario-tbody');
+    const tbody  = document.getElementById('horario-tbody');
+    const clases = HORARIOS_DB[seccion] || [];
+ 
+    // Horas únicas ordenadas de esta sección
+    const horas = [...new Set(clases.map(h => h.inicio))].sort();
+ 
     tbody.innerHTML = '';
+ 
+    if (horas.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="7" style="text-align:center; color:var(--text-dim); padding:30px;">
+                    Sin horario para esta sección
+                </td>
+            </tr>`;
+        return;
+    }
+ 
     horas.forEach(hora => {
         const tr = document.createElement('tr');
         let html = `<td>${hora}</td>`;
-        dias.forEach(dia => {
-            const clase = HORARIOS_DB.find(h => h.inicio === hora && h.dia === dia);
+ 
+        DIAS.forEach(dia => {
+            const clase = clases.find(h => h.inicio === hora && h.dia === dia);
             if (clase) {
                 const key = getKey(clase.codigo);
-                html += `<td><div class="pill pill-${key}">${clase.materia}<span class="cod">${clase.codigo} | ${clase.aula}</span></div></td>`;
+                html += `
+                    <td>
+                        <div class="pill pill-${key}">
+                            ${clase.materia}
+                            <span class="cod">${clase.codigo} | ${clase.aula}</span>
+                        </div>
+                    </td>`;
             } else {
                 html += `<td></td>`;
             }
         });
+ 
         tr.innerHTML = html;
         tbody.appendChild(tr);
     });
+ 
     document.getElementById('seccion-label-header').textContent = seccion;
 }
-
-function cambiarSeccion(val) { renderHorario(val); }
-
-window.onload = () => renderHorario('10212');
+ 
+function cambiarSeccion(val) {
+    renderHorario(val);
+}
+ 
+// Carga la sección inicial al abrir la página
+window.onload = () => renderHorario('{{ seccion_inicial }}');
+ 
+ 
+// ── Countdown próxima clase ───────────────────────────────────────────────────
+(function() {
+    const dataEl = document.getElementById('countdown-data');
+    if (!dataEl) return;
+ 
+    let segundosRestantes = parseInt(dataEl.dataset.segundos, 10);
+    const label = document.getElementById('countdown-label');
+ 
+    function formatear(seg) {
+        const h = Math.floor(seg / 3600);
+        const m = Math.floor((seg % 3600) / 60);
+        const s = seg % 60;
+        if (h > 0) return `en ${h}h ${m}m`;
+        if (m > 0) return `en ${m}m ${s}s`;
+        return `en ${s}s`;
+    }
+ 
+    function tick() {
+        if (segundosRestantes <= 0) {
+            label.textContent = '¡AHORA!';
+            return;
+        }
+        label.textContent = formatear(segundosRestantes);
+        segundosRestantes--;
+        setTimeout(tick, 1000);
+    }
+ 
+    tick();
+})();
 </script>
 
 </body>

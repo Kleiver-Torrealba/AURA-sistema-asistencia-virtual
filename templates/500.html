@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>500 — Error del servidor | AURA</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --bg-dark:      #09090b;
+            --card-dark:    #121216;
+            --border-color: #22222a;
+            --accent-red:   #ef4444;
+            --accent-yellow:#f59e0b;
+            --text-main:    #ffffff;
+            --text-dim:     #a1a1aa;
+            --shadow-md:    0 8px 24px rgba(0, 0, 0, 0.4);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: radial-gradient(circle at 50% 0%, rgba(45, 10, 10, 0.6) 0%, var(--bg-dark) 70%);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: rotate(0deg); }
+            20%       { transform: rotate(-8deg); }
+            40%       { transform: rotate(8deg); }
+            60%       { transform: rotate(-4deg); }
+            80%       { transform: rotate(4deg); }
+        }
+
+        .container {
+            text-align: center;
+            padding: 60px 40px;
+            max-width: 520px;
+
+            /* Glassmorphism */
+            background: rgba(18, 18, 22, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 24px;
+            box-shadow: var(--shadow-md), 0 0 40px rgba(239, 68, 68, 0.05);
+        }
+
+        .error-icon {
+            font-size: 4rem;
+            color: var(--accent-red);
+            margin-bottom: 24px;
+            display: inline-block;
+            animation: shake 1s ease-in-out 0.5s;
+        }
+
+        .error-code {
+            font-size: 6rem;
+            font-weight: 700;
+            line-height: 1;
+            background: linear-gradient(135deg, var(--accent-red), var(--accent-yellow));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 16px;
+        }
+
+        h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--text-main);
+            margin-bottom: 12px;
+        }
+
+        p {
+            font-size: 0.95rem;
+            color: var(--text-dim);
+            line-height: 1.6;
+            margin-bottom: 36px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 28px;
+            border-radius: 12px;
+            font-family: inherit;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: none;
+            margin: 0 6px;
+        }
+
+        .btn-primary {
+            background: var(--accent-red);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.35);
+        }
+
+        .btn-ghost {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-dim);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-ghost:hover {
+            background: rgba(255,255,255,0.1);
+            color: var(--text-main);
+            transform: translateY(-2px);
+        }
+
+        .brand {
+            margin-top: 40px;
+            font-size: 0.75rem;
+            letter-spacing: 4px;
+            color: var(--text-dim);
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="error-icon">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+        </div>
+
+        <div class="error-code">500</div>
+
+        <h1>Error interno del servidor</h1>
+        <p>Algo salió mal de nuestro lado.<br>
+           Ya estamos trabajando para resolverlo.</p>
+
+        <a href="/" class="btn btn-primary">
+            <i class="fa-solid fa-house"></i>
+            Volver al inicio
+        </a>
+        <a href="javascript:location.reload()" class="btn btn-ghost">
+            <i class="fa-solid fa-rotate-right"></i>
+            Reintentar
+        </a>
+
+        <div class="brand">A U R A</div>
+    </div>
+</body>
+</html>

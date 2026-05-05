@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
@@ -6,11 +6,38 @@ from django.core.mail import send_mail
 from django.core import signing
 from django.conf import settings
 from django.template.loader import render_to_string
+from datetime import date, datetime, timedelta
+from .models import Usuario, Estudiante, Materia, Horario, Asistencia, Seccion, SesionClase
 from django.db.models import Count, Q
 from django.utils import timezone
-from datetime import timedelta
-from django.http import JsonResponse
-from .models import Usuario, Estudiante, Materia, Horario, Asistencia, Seccion, SesionClase
+from django.http import JsonResponse, HttpResponseForbidden
+from django.views.decorators.http import require_POST
+from functools import wraps
+import qrcode
+import io
+import json
+import base64
+
+
+def solo_profesor(view_func):
+    """Permite acceso solo a usuarios autenticados con rol profesor."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated or not request.user.es_profesor:
+            return HttpResponseForbidden("Solo los profesores pueden acceder aquí.")
+        return view_func(request, *args, **kwargs)
+    return wrapper
+ 
+ 
+def solo_estudiante(view_func):
+    """Permite acceso solo a usuarios autenticados con rol estudiante."""
+    @wraps(view_func)
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated or not request.user.es_estudiante:
+            return HttpResponseForbidden("Solo los estudiantes pueden registrar asistencia por QR.")
+        return view_func(request, *args, **kwargs)
+    return wrapper
+
  
  
 # ─── Home ─────────────────────────────────────────────────────────────────────
@@ -37,117 +64,201 @@ def login_view(request):
  
  
 # ─── Crear usuario ─────────────────────────────────────────────────────────────
-def usuario_view(request):
-    secciones = Seccion.objects.filter(activa=True).order_by('codigo')
- 
-    if request.method == 'POST':
-        username   = request.POST.get('username', '').strip()
-        cedula     = request.POST.get('cedula', '').strip()
-        password   = request.POST.get('password', '').strip()
-        password2  = request.POST.get('password2', '').strip()
-        seccion_id = request.POST.get('seccion', '').strip()
- 
-        # ── Validaciones ──────────────────────────────────────────────────
-        if not all([username, cedula, password, password2, seccion_id]):
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'Todos los campos son obligatorios.',
-                'secciones': secciones,
-            })
- 
-        if password != password2:
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'Las contraseñas no coinciden.',
-                'secciones': secciones,
-            })
- 
-        if len(password) < 8:
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'La contraseña debe tener al menos 8 caracteres.',
-                'secciones': secciones,
-            })
- 
-        if Usuario.objects.filter(username=username).exists():
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'Ese nombre de usuario ya está en uso, elegí otro.',
-                'secciones': secciones,
-            })
- 
-        # ── Verificar cédula ──────────────────────────────────────────────
-        try:
-            estudiante = Estudiante.objects.get(cedula=cedula, activo=True)
-        except Estudiante.DoesNotExist:
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'Esa cédula no está registrada. Consultá a tu profesor.',
-                'secciones': secciones,
-            })
- 
-        # ── Verificar que no tenga cuenta ya ─────────────────────────────
-        if estudiante.usuario is not None:
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'Ya existe una cuenta vinculada a esa cédula.',
-                'secciones': secciones,
-            })
- 
-        # ── Verificar sección ─────────────────────────────────────────────
-        try:
-            seccion = Seccion.objects.get(id=seccion_id, activa=True)
-        except Seccion.DoesNotExist:
-            return render(request, 'web_ujap/crear_usuario.html', {
-                'error': 'La sección seleccionada no es válida.',
-                'secciones': secciones,
-            })
- 
-        # ── Crear Usuario, vincular Estudiante y asignar Sección ──────────
-        usuario = Usuario.objects.create_user(
-            username=username,
-            email=estudiante.correo,
-            password=password,
-            first_name=estudiante.nombre,
-            last_name=estudiante.apellido,
-            cedula=cedula,
-            rol=Usuario.ROL_ESTUDIANTE,
-        )
- 
-        estudiante.usuario = usuario
-        estudiante.seccion = seccion
-        estudiante.save()
- 
-        login(request, usuario)
-        return redirect('pagina')
- 
-    return render(request, 'web_ujap/crear_usuario.html', {
-        'secciones': secciones,
-    })
- 
- 
-# ─── Logout ───────────────────────────────────────────────────────────────────
-def logout_view(request):
-    logout(request)
-    return redirect('login')
- 
- 
-# ─── Página principal (después del login) ─────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# CAMBIO EN views.py — pagina_view
+#
+# La rama del estudiante ahora usa perfil.horarios_personales
+# en lugar de filtrar por sección.
+# Reemplazá toda la función pagina_view con esta versión.
+# ─────────────────────────────────────────────────────────────────────────────
+
 @login_required(login_url='login')
 def pagina_view(request):
-    horarios = Horario.objects.select_related('materia').all().order_by('dia_semana', 'hora_inicio')
- 
-    horarios_json = []
-    for h in horarios:
-        horarios_json.append({
-            'materia': h.materia.nombre,
-            'codigo': h.materia.codigo,
-            'dia': h.dia_semana,
-            'inicio': h.hora_inicio.strftime('%H:%M'),
-            'fin': h.hora_fin.strftime('%H:%M'),
-            'aula': h.aula,
+    hoy      = timezone.now().date()
+    ahora    = timezone.now().time()
+    contexto = {}
+
+    # ── RAMA PROFESOR ─────────────────────────────────────────────────────────
+    if request.user.es_profesor:
+        secciones = Seccion.objects.filter(activa=True).order_by('codigo')
+
+        horarios_por_seccion = {}
+        for sec in secciones:
+            hs = Horario.objects.select_related('materia').filter(
+                seccion=sec
+            ).order_by('dia_semana', 'hora_inicio')
+            horarios_por_seccion[sec.codigo] = [
+                {
+                    'materia': h.materia.nombre,
+                    'codigo':  h.materia.codigo,
+                    'dia':     h.dia_semana,
+                    'inicio':  h.hora_inicio.strftime('%H:%M'),
+                    'fin':     h.hora_fin.strftime('%H:%M'),
+                    'aula':    h.aula,
+                }
+                for h in hs
+            ]
+
+        primera = secciones.first().codigo if secciones.exists() else ''
+        contexto.update({
+            'horarios_json':   json.dumps(horarios_por_seccion),
+            'secciones':       secciones,
+            'seccion_inicial': primera,
         })
- 
-    import json
-    return render(request, 'web_ujap/pagina.html', {
-        'horarios_json': json.dumps(horarios_json)
+        return render(request, 'web_ujap/pagina.html', contexto)
+
+    # ── RAMA ESTUDIANTE ───────────────────────────────────────────────────────
+    secciones = Seccion.objects.filter(activa=True).order_by('codigo')
+
+    # JSON de todas las secciones para el selector
+    horarios_por_seccion = {}
+    for sec in secciones:
+        hs = Horario.objects.select_related('materia').filter(
+            seccion=sec
+        ).order_by('dia_semana', 'hora_inicio')
+        horarios_por_seccion[sec.codigo] = [
+            {
+                'materia': h.materia.nombre,
+                'codigo':  h.materia.codigo,
+                'dia':     h.dia_semana,
+                'inicio':  h.hora_inicio.strftime('%H:%M'),
+                'fin':     h.hora_fin.strftime('%H:%M'),
+                'aula':    h.aula,
+            }
+            for h in hs
+        ]
+
+    try:
+        perfil  = request.user.perfil_estudiante
+        seccion = perfil.seccion
+    except Exception:
+        primera = secciones.first().codigo if secciones.exists() else ''
+        contexto.update({
+            'horarios_json':    json.dumps(horarios_por_seccion),
+            'secciones':        secciones,
+            'seccion_inicial':  primera,
+            'faltas_semanales': 0,
+            'limite_semanal':   10,
+            'faltas_totales':   0,
+            'limite_total':     50,
+            'porc_semanal':     0,
+            'porc_total':       0,
+            'prox_materia':     None,
+            'prox_codigo':      None,
+            'prox_hora':        None,
+            'prox_segundos':    None,
+        })
+        return render(request, 'web_ujap/pagina.html', contexto)
+
+    seccion_inicial = seccion.codigo if seccion else (
+        secciones.first().codigo if secciones.exists() else ''
+    )
+
+    # ── Horarios personales del estudiante ────────────────────────────────────
+    # Si tiene horarios asignados individualmente los usa.
+    # Si no, cae a los de su sección (compatibilidad hacia atrás).
+    if perfil.horarios_personales.exists():
+        horarios_estudiante = perfil.horarios_personales.select_related(
+            'materia', 'seccion'
+        ).order_by('dia_semana', 'hora_inicio')
+
+        # Construir una sección virtual "MIS CLASES" con sus horarios reales
+        horarios_por_seccion['MIS_CLASES'] = [
+            {
+                'materia': h.materia.nombre,
+                'codigo':  h.materia.codigo,
+                'dia':     h.dia_semana,
+                'inicio':  h.hora_inicio.strftime('%H:%M'),
+                'fin':     h.hora_fin.strftime('%H:%M'),
+                'aula':    h.aula,
+            }
+            for h in horarios_estudiante
+        ]
+        seccion_inicial = 'MIS_CLASES'
+    else:
+        # Sin horarios personales → usa los de su sección
+        horarios_estudiante = Horario.objects.select_related(
+            'materia', 'seccion'
+        ).filter(seccion=seccion).order_by(
+            'dia_semana', 'hora_inicio'
+        ) if seccion else []
+
+    # ── Faltas semanales ──────────────────────────────────────────────────────
+    lunes = hoy - timedelta(days=hoy.weekday())
+    faltas_semanales = perfil.asistencias.filter(
+        fecha__gte=lunes,
+        fecha__lte=hoy,
+        estado='ausente'
+    ).count()
+    LIMITE_SEMANAL = 10
+
+    # ── Faltas totales ────────────────────────────────────────────────────────
+    faltas_totales = perfil.asistencias.filter(estado='ausente').count()
+    LIMITE_TOTAL   = 50
+
+    # ── Próxima clase ─────────────────────────────────────────────────────────
+    DIAS_ORDEN  = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado']
+    dia_hoy_idx = hoy.weekday()
+
+    prox_materia  = None
+    prox_codigo   = None
+    prox_hora     = None
+    prox_segundos = None
+
+    nombre_dia_hoy = DIAS_ORDEN[dia_hoy_idx] if dia_hoy_idx < 6 else None
+
+    if nombre_dia_hoy:
+        for h in horarios_estudiante:
+            if h.dia_semana == nombre_dia_hoy and h.hora_inicio > ahora:
+                dt_prox       = datetime.combine(hoy, h.hora_inicio)
+                dt_ahora      = datetime.combine(hoy, ahora)
+                diferencia    = dt_prox - dt_ahora
+                prox_materia  = h.materia.nombre
+                prox_codigo   = h.materia.codigo
+                prox_hora     = h.hora_inicio.strftime('%H:%M')
+                prox_segundos = int(diferencia.total_seconds())
+                break
+
+    if not prox_materia:
+        for offset in range(1, 7):
+            idx_sig    = (dia_hoy_idx + offset) % 7
+            if idx_sig >= len(DIAS_ORDEN):
+                continue
+            nombre_sig = DIAS_ORDEN[idx_sig]
+            fecha_sig  = hoy + timedelta(days=offset)
+            for h in horarios_estudiante:
+                if h.dia_semana == nombre_sig:
+                    dt_prox       = datetime.combine(fecha_sig, h.hora_inicio)
+                    dt_ahora      = datetime.combine(hoy, ahora)
+                    diferencia    = dt_prox - dt_ahora
+                    prox_materia  = h.materia.nombre
+                    prox_codigo   = h.materia.codigo
+                    prox_hora     = h.hora_inicio.strftime('%H:%M')
+                    prox_segundos = int(diferencia.total_seconds())
+                    break
+            if prox_materia:
+                break
+
+    # ── Porcentajes ───────────────────────────────────────────────────────────
+    porc_semanal = round((faltas_semanales / LIMITE_SEMANAL) * 100) if LIMITE_SEMANAL else 0
+    porc_total   = round((faltas_totales   / LIMITE_TOTAL)   * 100) if LIMITE_TOTAL   else 0
+
+    contexto.update({
+        'horarios_json':    json.dumps(horarios_por_seccion),
+        'secciones':        secciones,
+        'seccion_inicial':  seccion_inicial,
+        'faltas_semanales': faltas_semanales,
+        'limite_semanal':   LIMITE_SEMANAL,
+        'faltas_totales':   faltas_totales,
+        'limite_total':     LIMITE_TOTAL,
+        'porc_semanal':     min(porc_semanal, 100),
+        'porc_total':       min(porc_total, 100),
+        'prox_materia':     prox_materia,
+        'prox_codigo':      prox_codigo,
+        'prox_hora':        prox_hora,
+        'prox_segundos':    prox_segundos,
     })
- 
- 
+    return render(request, 'web_ujap/pagina.html', contexto)
 # ─── Contacto ─────────────────────────────────────────────────────────────────
 def contacto_view(request):
     return render(request, 'web_ujap/contacto.html')
@@ -215,6 +326,8 @@ def recuperar_confirmar_view(request, token):
  
  
 # ─── Dashboard ────────────────────────────────────────────────────────────────
+@login_required(login_url='login')
+@solo_profesor
 def dashboard_index(request):
     hoy = timezone.now().date()
     inicio_mes = hoy.replace(day=1)
@@ -239,19 +352,11 @@ def dashboard_index(request):
         total_faltas=Count('asistencias', filter=Q(asistencias__estado='ausente'))
     ).order_by('-total_faltas')[:5]
  
-    estudiantes_mejor_asistencia = []
-    for estudiante in Estudiante.objects.filter(activo=True):
-        porcentaje = estudiante.calcular_porcentaje_asistencia()
-        if porcentaje > 0:
-            estudiantes_mejor_asistencia.append({
-                'estudiante': estudiante,
-                'porcentaje': porcentaje
-            })
-    estudiantes_mejor_asistencia = sorted(
-        estudiantes_mejor_asistencia,
-        key=lambda x: x['porcentaje'],
-        reverse=True
-    )[:5]
+    estudiantes_mejor_asistencia = (
+        Estudiante.con_porcentaje()
+        .filter(porcentaje__gt=0)
+        .order_by('-porcentaje')[:5]
+    )
  
     materias_ausencias = Materia.objects.filter(activa=True).annotate(
         total_ausencias=Count('asistencias', filter=Q(asistencias__estado='ausente'))
@@ -282,7 +387,96 @@ def dashboard_index(request):
     return render(request, 'web_ujap/index.html', context)
  
  
+@login_required(login_url='login')
+@solo_profesor
+def estadisticas_json(request):
+    tipo = request.GET.get('tipo', 'asistencias_semana')
+ 
+    if tipo == 'asistencias_semana':
+        hoy = timezone.now().date()
+        labels = []
+        datos = {'presentes': [], 'ausentes': [], 'tardes': []}
+ 
+        for i in range(6, -1, -1):
+            fecha = hoy - timedelta(days=i)
+            asistencias = Asistencia.objects.filter(fecha=fecha)
+            labels.append(fecha.strftime('%d/%m'))
+            datos['presentes'].append(asistencias.filter(estado='presente').count())
+            datos['ausentes'].append(asistencias.filter(estado='ausente').count())
+            datos['tardes'].append(asistencias.filter(estado='tarde').count())
+ 
+        return JsonResponse({
+            'labels': labels,
+            'datasets': [
+                {'label': 'Presentes', 'data': datos['presentes'],
+                 'backgroundColor': 'rgba(75, 192, 192, 0.6)', 'borderColor': 'rgba(75, 192, 192, 1)', 'borderWidth': 2},
+                {'label': 'Ausentes', 'data': datos['ausentes'],
+                 'backgroundColor': 'rgba(255, 99, 132, 0.6)', 'borderColor': 'rgba(255, 99, 132, 1)', 'borderWidth': 2},
+                {'label': 'Tardanzas', 'data': datos['tardes'],
+                 'backgroundColor': 'rgba(255, 206, 86, 0.6)', 'borderColor': 'rgba(255, 206, 86, 1)', 'borderWidth': 2},
+            ]
+        })
+ 
+    elif tipo == 'estados_hoy':
+        hoy = timezone.now().date()
+        asistencias = Asistencia.objects.filter(fecha=hoy)
+        return JsonResponse({
+            'labels': ['Presentes', 'Ausentes', 'Tardanzas', 'Justificados'],
+            'datasets': [{
+                'data': [
+                    asistencias.filter(estado='presente').count(),
+                    asistencias.filter(estado='ausente').count(),
+                    asistencias.filter(estado='tarde').count(),
+                    asistencias.filter(estado='justificado').count(),
+                ],
+                'backgroundColor': [
+                    'rgba(75, 192, 192, 0.8)', 'rgba(255, 99, 132, 0.8)',
+                    'rgba(255, 206, 86, 0.8)', 'rgba(54, 162, 235, 0.8)'
+                ],
+                'borderWidth': 2
+            }]
+        })
+ 
+    elif tipo == 'asistencias_por_materia':
+        materias = Materia.objects.filter(activa=True).annotate(
+            total_asistencias=Count('asistencias')
+        ).order_by('-total_asistencias')[:5]
+        return JsonResponse({
+            'labels': [m.nombre for m in materias],
+            'datasets': [{
+                'label': 'Total Asistencias',
+                'data': [m.total_asistencias for m in materias],
+                'backgroundColor': 'rgba(153, 102, 255, 0.6)',
+                'borderColor': 'rgba(153, 102, 255, 1)',
+                'borderWidth': 2
+            }]
+        })
+ 
+    return JsonResponse({'error': 'Tipo no válido'}, status=400)
+ 
+ 
+@login_required(login_url='login')
+@solo_profesor
+def reporte_estudiante(request, estudiante_id):
+    estudiante = Estudiante.objects.get(id=estudiante_id)
+    asistencias = estudiante.asistencias.all().order_by('-fecha')
+ 
+    context = {
+        'estudiante': estudiante,
+        'asistencias': asistencias[:20],
+        'total_asistencias': asistencias.count(),
+        'presentes': asistencias.filter(estado='presente').count(),
+        'ausentes': asistencias.filter(estado='ausente').count(),
+        'tardes': asistencias.filter(estado='tarde').count(),
+        'justificados': asistencias.filter(estado='justificado').count(),
+        'porcentaje': estudiante.calcular_porcentaje_asistencia()
+    }
+    return render(request, 'dashboard/reporte_estudiante.html', context)
+ 
+ 
 # ─── API Estadísticas ─────────────────────────────────────────────────────────
+@login_required(login_url='login')
+@solo_profesor
 def estadisticas_json(request):
     tipo = request.GET.get('tipo', 'asistencias_semana')
  
@@ -350,51 +544,29 @@ def estadisticas_json(request):
  
  
 # ─── Reporte estudiante ───────────────────────────────────────────────────────
+@login_required(login_url='login')
+@solo_profesor
 def reporte_estudiante(request, estudiante_id):
-    estudiante = Estudiante.objects.get(id=estudiante_id)
+    # ANTES: Estudiante.objects.get(id=estudiante_id)  ← explota con 500
+    # AHORA: devuelve 404 limpio si el ID no existe    ← comportamiento correcto
+    estudiante = get_object_or_404(Estudiante, id=estudiante_id)
     asistencias = estudiante.asistencias.all().order_by('-fecha')
  
     context = {
-        'estudiante': estudiante,
-        'asistencias': asistencias[:20],
+        'estudiante':       estudiante,
+        'asistencias':      asistencias[:20],
         'total_asistencias': asistencias.count(),
-        'presentes': asistencias.filter(estado='presente').count(),
-        'ausentes': asistencias.filter(estado='ausente').count(),
-        'tardes': asistencias.filter(estado='tarde').count(),
-        'justificados': asistencias.filter(estado='justificado').count(),
-        'porcentaje': estudiante.calcular_porcentaje_asistencia()
+        'presentes':        asistencias.filter(estado='presente').count(),
+        'ausentes':         asistencias.filter(estado='ausente').count(),
+        'tardes':           asistencias.filter(estado='tarde').count(),
+        'justificados':     asistencias.filter(estado='justificado').count(),
+        'porcentaje':       estudiante.calcular_porcentaje_asistencia()
     }
     return render(request, 'dashboard/reporte_estudiante.html', context)
  
  
 # ─── Vistas QR ────────────────────────────────────────────────────────────────
-import qrcode
-import io
-import base64
-from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_POST
-from django.http import HttpResponseForbidden
-from functools import wraps
- 
- 
-def solo_profesor(view_func):
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or not request.user.es_profesor:
-            return HttpResponseForbidden("Solo los profesores pueden acceder aquí.")
-        return view_func(request, *args, **kwargs)
-    return wrapper
- 
- 
-def solo_estudiante(view_func):
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated or not request.user.es_estudiante:
-            return HttpResponseForbidden("Solo los estudiantes pueden registrar asistencia por QR.")
-        return view_func(request, *args, **kwargs)
-    return wrapper
- 
- 
+
 def _generar_qr_b64(url: str) -> str:
     qr = qrcode.QRCode(
         version=1,
@@ -409,27 +581,27 @@ def _generar_qr_b64(url: str) -> str:
     img.save(buffer, format='PNG')
     buffer.seek(0)
     return base64.b64encode(buffer.getvalue()).decode('utf-8')
- 
- 
+
+
 @login_required(login_url='login')
 @solo_profesor
 def iniciar_sesion_view(request):
     horarios = Horario.objects.filter(
         profesor=request.user
     ).select_related('materia', 'seccion').order_by('dia_semana', 'hora_inicio')
- 
+
     if request.method == 'POST':
         horario_id       = request.POST.get('horario')
         duracion_minutos = int(request.POST.get('duracion', 15))
- 
+
         horario = get_object_or_404(Horario, id=horario_id, profesor=request.user)
- 
+
         SesionClase.objects.filter(
             horario=horario,
             fecha=timezone.now().date(),
             activa=True
         ).update(activa=False)
- 
+
         sesion = SesionClase.objects.create(
             horario=horario,
             fecha=timezone.now().date(),
@@ -437,28 +609,28 @@ def iniciar_sesion_view(request):
             creada_por=request.user,
         )
         return redirect('dashboard:panel_sesion', token=sesion.token)
- 
+
     return render(request, 'web_ujap/qr/iniciar_sesion.html', {'horarios': horarios})
- 
- 
+
+
 @login_required(login_url='login')
 @solo_profesor
 def panel_sesion_view(request, token):
     sesion = get_object_or_404(SesionClase, token=token, creada_por=request.user)
- 
+
     url_escaneo = request.build_absolute_uri(f'/asistencia/escanear/{token}/')
     qr_imagen_b64 = _generar_qr_b64(url_escaneo)
- 
+
     todos_estudiantes = Estudiante.objects.filter(
         activo=True,
         seccion=sesion.horario.seccion
     ).order_by('apellido')
- 
+
     asistencias_registradas = {
         a.estudiante_id: a
         for a in Asistencia.objects.filter(sesion=sesion).select_related('estudiante')
     }
- 
+
     lista = []
     for est in todos_estudiantes:
         asistencia = asistencias_registradas.get(est.id)
@@ -467,7 +639,7 @@ def panel_sesion_view(request, token):
             'asistencia': asistencia,
             'estado': asistencia.estado if asistencia else 'sin_registro',
         })
- 
+
     return render(request, 'web_ujap/qr/panel_sesion.html', {
         'sesion':       sesion,
         'qr_b64':       qr_imagen_b64,
@@ -614,6 +786,19 @@ def buscar_estudiante_json(request, token):
          'cedula': e.cedula, 'ya_registrado': e.id in ya_registrados}
         for e in estudiantes
     ]})
+
+# ─── Usuario ──────────────────────────────────────────────────────────────────
+@login_required(login_url='login')
+def usuario_view(request):
+    return render(request, 'web_ujap/usuario.html')
+
+
+# ─── Logout ───────────────────────────────────────────────────────────────────
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
+
 
 pass
     
