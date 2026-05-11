@@ -2,8 +2,8 @@
 Django settings for AURA project.
 
 MISIÓN 1 — Cambios aplicados:
-  [T2] DB_NAME, DB_USER y ALLOWED_HOSTS ahora vienen del .env
-  [T3] DEBUG por defecto es False; solo es True si el .env lo declara explícitamente
+[T2] DB_NAME, DB_USER y ALLOWED_HOSTS ahora vienen del .env
+[T3] DEBUG por defecto es False; solo es True si el .env lo declara explícitamente
 """
 
 import os

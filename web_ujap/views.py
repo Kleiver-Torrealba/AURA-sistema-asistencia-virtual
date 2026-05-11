@@ -26,9 +26,8 @@ def solo_profesor(view_func):
         if not request.user.is_authenticated or not request.user.es_profesor:
             return HttpResponseForbidden("Solo los profesores pueden acceder aquí.")
         return view_func(request, *args, **kwargs)
-    return wrapper
- 
- 
+    return wrapper 
+
 def solo_estudiante(view_func):
     """Permite acceso solo a usuarios autenticados con rol estudiante."""
     @wraps(view_func)
@@ -38,21 +37,19 @@ def solo_estudiante(view_func):
         return view_func(request, *args, **kwargs)
     return wrapper
 
- 
- 
+
 # ─── Home ─────────────────────────────────────────────────────────────────────
 def home_view(request):
     return render(request, 'web_ujap/home.html')
- 
- 
+
 # ─── Login ────────────────────────────────────────────────────────────────────
 def login_view(request):
     if request.method == 'POST':
         username = request.POST.get('usuario')
         password = request.POST.get('password')
- 
+
         user = authenticate(request, username=username, password=password)
- 
+
         if user is not None:
             login(request, user)
             return redirect('pagina')
@@ -61,8 +58,8 @@ def login_view(request):
                 'error': 'Usuario o contraseña incorrectos'
             })
     return render(request, 'web_ujap/login.html')
- 
- 
+
+
 # ─── Crear usuario ─────────────────────────────────────────────────────────────
 # ─────────────────────────────────────────────────────────────────────────────
 # CAMBIO EN views.py — pagina_view
@@ -262,14 +259,13 @@ def pagina_view(request):
 # ─── Contacto ─────────────────────────────────────────────────────────────────
 def contacto_view(request):
     return render(request, 'web_ujap/contacto.html')
- 
- 
+
 # ─── Recuperar contraseña – Paso 1 ────────────────────────────────────────────
 def recuperar_view(request):
     if request.method == 'POST':
         correo = request.POST.get('email', '').strip().lower()
         usuario = Usuario.objects.filter(email__iexact=correo).first()
- 
+
         if usuario:
             token = signing.dumps({'id': usuario.id}, salt='recuperar-password')
             reset_url = request.build_absolute_uri(f'/recuperar/confirmar/{token}/')
@@ -286,18 +282,18 @@ def recuperar_view(request):
                 html_message=email_html,
                 fail_silently=False,
             )
- 
+
         messages.success(request, 'Si ese correo está registrado, recibirás las instrucciones en breve.')
         return redirect('recuperar_enviado')
- 
+
     return render(request, 'web_ujap/recuperar.html')
- 
- 
+
+
 # ─── Recuperar – Paso 2 ───────────────────────────────────────────────────────
 def recuperar_enviado_view(request):
     return render(request, 'web_ujap/recuperar_enviado.html')
- 
- 
+
+
 # ─── Recuperar – Paso 3 ───────────────────────────────────────────────────────
 def recuperar_confirmar_view(request, token):
     try:
@@ -305,11 +301,11 @@ def recuperar_confirmar_view(request, token):
         usuario = Usuario.objects.get(id=data['id'])
     except (signing.SignatureExpired, signing.BadSignature, Usuario.DoesNotExist):
         return render(request, 'web_ujap/recuperar_invalido.html')
- 
+
     if request.method == 'POST':
         pass1 = request.POST.get('password', '').strip()
         pass2 = request.POST.get('confirm_password', '').strip()
- 
+
         if not pass1:
             messages.error(request, 'La contraseña no puede estar vacía.')
         elif len(pass1) < 8:
@@ -321,54 +317,54 @@ def recuperar_confirmar_view(request, token):
             usuario.save()
             messages.success(request, '¡Contraseña actualizada correctamente!')
             return redirect('login')
- 
+
     return render(request, 'web_ujap/recuperar_confirmar.html', {'token': token})
- 
- 
+
+
 # ─── Dashboard ────────────────────────────────────────────────────────────────
 @login_required(login_url='login')
 @solo_profesor
 def dashboard_index(request):
     hoy = timezone.now().date()
     inicio_mes = hoy.replace(day=1)
- 
+
     total_estudiantes = Estudiante.objects.filter(activo=True).count()
     total_materias = Materia.objects.filter(activa=True).count()
- 
+
     asistencias_hoy = Asistencia.objects.filter(fecha=hoy)
     total_asistencias_hoy = asistencias_hoy.count()
     presentes_hoy = asistencias_hoy.filter(estado='presente').count()
     ausentes_hoy = asistencias_hoy.filter(estado='ausente').count()
     tardes_hoy = asistencias_hoy.filter(estado='tarde').count()
- 
+
     porcentaje_asistencia_hoy = 0
     if total_asistencias_hoy > 0:
         porcentaje_asistencia_hoy = round((presentes_hoy / total_asistencias_hoy) * 100, 2)
- 
+
     asistencias_mes = Asistencia.objects.filter(fecha__gte=inicio_mes, fecha__lte=hoy)
     ausencias_mes = asistencias_mes.filter(estado='ausente').count()
- 
+
     estudiantes_faltas = Estudiante.objects.filter(activo=True).annotate(
         total_faltas=Count('asistencias', filter=Q(asistencias__estado='ausente'))
     ).order_by('-total_faltas')[:5]
- 
+
     estudiantes_mejor_asistencia = (
         Estudiante.con_porcentaje()
         .filter(porcentaje__gt=0)
         .order_by('-porcentaje')[:5]
     )
- 
+
     materias_ausencias = Materia.objects.filter(activa=True).annotate(
         total_ausencias=Count('asistencias', filter=Q(asistencias__estado='ausente'))
     ).order_by('-total_ausencias')[:5]
- 
+
     dias_español = {
         'monday': 'lunes', 'tuesday': 'martes', 'wednesday': 'miercoles',
         'thursday': 'jueves', 'friday': 'viernes', 'saturday': 'sabado', 'sunday': 'domingo'
     }
     dia_hoy_español = dias_español.get(hoy.strftime('%A').lower(), 'lunes')
     horarios_hoy = Horario.objects.filter(dia_semana=dia_hoy_español).order_by('hora_inicio')
- 
+
     context = {
         'total_estudiantes': total_estudiantes,
         'total_materias': total_materias,
@@ -385,18 +381,18 @@ def dashboard_index(request):
         'dia_hoy': dia_hoy_español,
     }
     return render(request, 'web_ujap/index.html', context)
- 
- 
+
+
 @login_required(login_url='login')
 @solo_profesor
 def estadisticas_json(request):
     tipo = request.GET.get('tipo', 'asistencias_semana')
- 
+
     if tipo == 'asistencias_semana':
         hoy = timezone.now().date()
         labels = []
         datos = {'presentes': [], 'ausentes': [], 'tardes': []}
- 
+
         for i in range(6, -1, -1):
             fecha = hoy - timedelta(days=i)
             asistencias = Asistencia.objects.filter(fecha=fecha)
@@ -404,19 +400,18 @@ def estadisticas_json(request):
             datos['presentes'].append(asistencias.filter(estado='presente').count())
             datos['ausentes'].append(asistencias.filter(estado='ausente').count())
             datos['tardes'].append(asistencias.filter(estado='tarde').count())
- 
+
         return JsonResponse({
             'labels': labels,
             'datasets': [
                 {'label': 'Presentes', 'data': datos['presentes'],
-                 'backgroundColor': 'rgba(75, 192, 192, 0.6)', 'borderColor': 'rgba(75, 192, 192, 1)', 'borderWidth': 2},
+                'backgroundColor': 'rgba(75, 192, 192, 0.6)', 'borderColor': 'rgba(75, 192, 192, 1)', 'borderWidth': 2},
                 {'label': 'Ausentes', 'data': datos['ausentes'],
-                 'backgroundColor': 'rgba(255, 99, 132, 0.6)', 'borderColor': 'rgba(255, 99, 132, 1)', 'borderWidth': 2},
+                'backgroundColor': 'rgba(255, 99, 132, 0.6)', 'borderColor': 'rgba(255, 99, 132, 1)', 'borderWidth': 2},
                 {'label': 'Tardanzas', 'data': datos['tardes'],
-                 'backgroundColor': 'rgba(255, 206, 86, 0.6)', 'borderColor': 'rgba(255, 206, 86, 1)', 'borderWidth': 2},
+                'backgroundColor': 'rgba(255, 206, 86, 0.6)', 'borderColor': 'rgba(255, 206, 86, 1)', 'borderWidth': 2},
             ]
-        })
- 
+        }) 
     elif tipo == 'estados_hoy':
         hoy = timezone.now().date()
         asistencias = Asistencia.objects.filter(fecha=hoy)
@@ -436,7 +431,7 @@ def estadisticas_json(request):
                 'borderWidth': 2
             }]
         })
- 
+
     elif tipo == 'asistencias_por_materia':
         materias = Materia.objects.filter(activa=True).annotate(
             total_asistencias=Count('asistencias')
@@ -451,16 +446,14 @@ def estadisticas_json(request):
                 'borderWidth': 2
             }]
         })
- 
     return JsonResponse({'error': 'Tipo no válido'}, status=400)
- 
- 
+
 @login_required(login_url='login')
 @solo_profesor
 def reporte_estudiante(request, estudiante_id):
     estudiante = Estudiante.objects.get(id=estudiante_id)
     asistencias = estudiante.asistencias.all().order_by('-fecha')
- 
+
     context = {
         'estudiante': estudiante,
         'asistencias': asistencias[:20],
@@ -472,19 +465,19 @@ def reporte_estudiante(request, estudiante_id):
         'porcentaje': estudiante.calcular_porcentaje_asistencia()
     }
     return render(request, 'dashboard/reporte_estudiante.html', context)
- 
- 
+
+
 # ─── API Estadísticas ─────────────────────────────────────────────────────────
 @login_required(login_url='login')
 @solo_profesor
 def estadisticas_json(request):
     tipo = request.GET.get('tipo', 'asistencias_semana')
- 
+
     if tipo == 'asistencias_semana':
         hoy = timezone.now().date()
         labels = []
         datos = {'presentes': [], 'ausentes': [], 'tardes': []}
- 
+
         for i in range(6, -1, -1):
             fecha = hoy - timedelta(days=i)
             asistencias = Asistencia.objects.filter(fecha=fecha)
@@ -492,19 +485,19 @@ def estadisticas_json(request):
             datos['presentes'].append(asistencias.filter(estado='presente').count())
             datos['ausentes'].append(asistencias.filter(estado='ausente').count())
             datos['tardes'].append(asistencias.filter(estado='tarde').count())
- 
+
         return JsonResponse({
             'labels': labels,
             'datasets': [
                 {'label': 'Presentes', 'data': datos['presentes'],
-                 'backgroundColor': 'rgba(75, 192, 192, 0.6)', 'borderColor': 'rgba(75, 192, 192, 1)', 'borderWidth': 2},
+                'backgroundColor': 'rgba(75, 192, 192, 0.6)', 'borderColor': 'rgba(75, 192, 192, 1)', 'borderWidth': 2},
                 {'label': 'Ausentes', 'data': datos['ausentes'],
-                 'backgroundColor': 'rgba(255, 99, 132, 0.6)', 'borderColor': 'rgba(255, 99, 132, 1)', 'borderWidth': 2},
+                'backgroundColor': 'rgba(255, 99, 132, 0.6)', 'borderColor': 'rgba(255, 99, 132, 1)', 'borderWidth': 2},
                 {'label': 'Tardanzas', 'data': datos['tardes'],
-                 'backgroundColor': 'rgba(255, 206, 86, 0.6)', 'borderColor': 'rgba(255, 206, 86, 1)', 'borderWidth': 2},
+                'backgroundColor': 'rgba(255, 206, 86, 0.6)', 'borderColor': 'rgba(255, 206, 86, 1)', 'borderWidth': 2},
             ]
         })
- 
+
     elif tipo == 'estados_hoy':
         hoy = timezone.now().date()
         asistencias = Asistencia.objects.filter(fecha=hoy)
@@ -524,7 +517,7 @@ def estadisticas_json(request):
                 'borderWidth': 2
             }]
         })
- 
+
     elif tipo == 'asistencias_por_materia':
         materias = Materia.objects.filter(activa=True).annotate(
             total_asistencias=Count('asistencias')
@@ -539,10 +532,10 @@ def estadisticas_json(request):
                 'borderWidth': 2
             }]
         })
- 
+
     return JsonResponse({'error': 'Tipo no válido'}, status=400)
- 
- 
+
+
 # ─── Reporte estudiante ───────────────────────────────────────────────────────
 @login_required(login_url='login')
 @solo_profesor
@@ -551,7 +544,7 @@ def reporte_estudiante(request, estudiante_id):
     # AHORA: devuelve 404 limpio si el ID no existe    ← comportamiento correcto
     estudiante = get_object_or_404(Estudiante, id=estudiante_id)
     asistencias = estudiante.asistencias.all().order_by('-fecha')
- 
+
     context = {
         'estudiante':       estudiante,
         'asistencias':      asistencias[:20],
@@ -563,8 +556,8 @@ def reporte_estudiante(request, estudiante_id):
         'porcentaje':       estudiante.calcular_porcentaje_asistencia()
     }
     return render(request, 'dashboard/reporte_estudiante.html', context)
- 
- 
+
+
 # ─── Vistas QR ────────────────────────────────────────────────────────────────
 
 def _generar_qr_b64(url: str) -> str:
@@ -650,8 +643,8 @@ def panel_sesion_view(request, token):
         'ausentes':     sum(1 for x in lista if x['estado'] == 'ausente'),
         'sin_registro': sum(1 for x in lista if x['estado'] == 'sin_registro'),
     })
- 
- 
+
+
 @login_required(login_url='login')
 @solo_profesor
 @require_POST
@@ -659,23 +652,23 @@ def marcar_manual_view(request, token):
     sesion        = get_object_or_404(SesionClase, token=token, creada_por=request.user)
     estudiante_id = request.POST.get('estudiante_id')
     nuevo_estado  = request.POST.get('estado')
- 
+
     if nuevo_estado not in ['presente', 'ausente', 'tarde', 'justificado']:
         return JsonResponse({'ok': False, 'error': 'Estado inválido.'}, status=400)
- 
+
     estudiante = get_object_or_404(Estudiante, id=estudiante_id)
- 
+
     Asistencia.objects.update_or_create(
         estudiante=estudiante,
         materia=sesion.horario.materia,
         fecha=sesion.fecha,
         defaults={'estado': nuevo_estado, 'metodo': 'manual', 'sesion': sesion}
     )
- 
+
     return JsonResponse({'ok': True, 'estado': nuevo_estado,
-                         'mensaje': f"{estudiante.nombre_completo} marcado como {nuevo_estado}."})
- 
- 
+                        'mensaje': f"{estudiante.nombre_completo} marcado como {nuevo_estado}."})
+
+
 @login_required(login_url='login')
 @solo_profesor
 @require_POST
@@ -684,14 +677,14 @@ def cerrar_sesion_view(request, token):
     sesion.activa = False
     sesion.save()
     return redirect('dashboard:index')
- 
- 
+
+
 @login_required(login_url='login')
 @solo_profesor
 def estado_sesion_json(request, token):
     sesion = get_object_or_404(SesionClase, token=token, creada_por=request.user)
     asistencias = Asistencia.objects.filter(sesion=sesion).select_related('estudiante')
- 
+
     return JsonResponse({
         'vigente':           sesion.esta_vigente,
         'minutos_restantes': sesion.minutos_restantes,
@@ -706,27 +699,27 @@ def estado_sesion_json(request, token):
             for a in asistencias
         ]
     })
- 
- 
+
+
 @login_required(login_url='login')
 @solo_estudiante
 def escanear_qr_view(request, token):
     sesion = SesionClase.objects.filter(token=token).select_related(
         'horario__materia'
     ).first()
- 
+
     if not sesion:
         return render(request, 'web_ujap/qr/resultado_escaneo.html', {
             'exito': False, 'mensaje': 'El código QR no es válido.',
         })
- 
+
     if not sesion.esta_vigente:
         return render(request, 'web_ujap/qr/resultado_escaneo.html', {
             'exito': False,
             'mensaje': 'Este código QR ya expiró o la sesión fue cerrada por el profesor.',
             'sesion': sesion,
         })
- 
+
     try:
         estudiante = request.user.perfil_estudiante
     except Estudiante.DoesNotExist:
@@ -734,20 +727,20 @@ def escanear_qr_view(request, token):
             'exito': False,
             'mensaje': 'Tu cuenta no está vinculada a ningún perfil de estudiante.',
         })
- 
+
     ya_registro = Asistencia.objects.filter(
         estudiante=estudiante,
         materia=sesion.horario.materia,
         fecha=sesion.fecha,
     ).first()
- 
+
     if ya_registro:
         return render(request, 'web_ujap/qr/resultado_escaneo.html', {
             'exito': False,
             'mensaje': f'Ya registraste tu asistencia para {sesion.horario.materia.nombre} hoy ({ya_registro.get_estado_display()}).',
             'sesion': sesion,
         })
- 
+
     Asistencia.objects.create(
         estudiante=estudiante,
         materia=sesion.horario.materia,
@@ -756,7 +749,7 @@ def escanear_qr_view(request, token):
         estado='presente',
         metodo='qr',
     )
- 
+
     return render(request, 'web_ujap/qr/resultado_escaneo.html', {
         'exito':      True,
         'mensaje':    f'¡Asistencia registrada para {sesion.horario.materia.nombre}!',
@@ -783,14 +776,14 @@ def buscar_estudiante_json(request, token):
         sesion=sesion).values_list('estudiante_id', flat=True))
     return JsonResponse({'resultados': [
         {'id': e.id, 'nombre': e.nombre_completo,
-         'cedula': e.cedula, 'ya_registrado': e.id in ya_registrados}
+        'cedula': e.cedula, 'ya_registrado': e.id in ya_registrados}
         for e in estudiantes
     ]})
 
 # ─── Usuario ──────────────────────────────────────────────────────────────────
 @login_required(login_url='login')
 def usuario_view(request):
-    return render(request, 'web_ujap/usuario.html')
+    return render(request, 'web_ujap/crear_usuario.html')
 
 
 # ─── Logout ───────────────────────────────────────────────────────────────────
@@ -800,6 +793,6 @@ def logout_view(request):
 
 
 
+
 pass
     
- 

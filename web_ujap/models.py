@@ -3,8 +3,6 @@ from django.utils import timezone
 from django.contrib.auth.models import AbstractUser
 import uuid
 
-
-# ===== MODELO LEGACY (NO TOCAR) =====
 # ===== MODELO LEGACY (NO TOCAR) =====
 class UsuarioUJAP(models.Model):
     """
@@ -43,7 +41,6 @@ class Usuario(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_rol_display()})"
-
 
 # ===== MATERIA =====
 class Materia(models.Model):
@@ -90,7 +87,6 @@ class Seccion(models.Model):
         return Materia.objects.filter(
             horarios__seccion=self
         ).distinct()
-
 
 # ===== HORARIO =====
 class Horario(models.Model):
@@ -148,7 +144,7 @@ class Estudiante(models.Model):
     """
     Perfil extendido de un usuario estudiante.
     Se vincula a un Usuario al momento del registro.
- 
+
     La sección indica el grupo base del estudiante, pero sus horarios
     reales se asignan individualmente mediante `horarios_personales`,
     lo que permite cursar materias de distintas secciones.
@@ -183,19 +179,19 @@ class Estudiante(models.Model):
     correo        = models.EmailField(unique=True)
     fecha_ingreso = models.DateField(default=timezone.now)
     activo        = models.BooleanField(default=True)
- 
+
     class Meta:
         verbose_name        = "Estudiante"
         verbose_name_plural = "Estudiantes"
         ordering            = ['apellido', 'nombre']
- 
+
     def __str__(self):
         return f"{self.apellido}, {self.nombre} ({self.cedula})"
- 
+
     @property
     def nombre_completo(self):
         return f"{self.nombre} {self.apellido}"
- 
+
     def get_materias(self):
         """
         Las materias del estudiante vienen de sus horarios personales.
@@ -208,19 +204,19 @@ class Estudiante(models.Model):
         if self.seccion:
             return self.seccion.get_materias()
         return Materia.objects.none()
- 
+
     def calcular_porcentaje_asistencia(self):
         total = self.asistencias.count()
         if total == 0:
             return 0
         presentes = self.asistencias.filter(estado='presente').count()
         return round((presentes / total) * 100, 2)
- 
+
     @staticmethod
     def con_porcentaje():
         from django.db.models import Count, Case, When, FloatField, Value, ExpressionWrapper, F
         from django.db.models.functions import Coalesce
- 
+
         return Estudiante.objects.filter(activo=True).annotate(
             total_clases=Count('asistencias'),
             clases_presente=Count(
