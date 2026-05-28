@@ -1,0 +1,27 @@
+[33m47cb2f2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m Add missing files for Vercel
+[33m91531cf[m Fix Vercel deployment: add api/index.py, fix urls.py, add vercel.json
+[33m2aff581[m Corregir ruta de api_index.py en vercel.json
+[33m4f73588[m Forzar despliegue tras corregir configuración
+[33m9eaed7e[m Forzar despliegue tras corregir configuración
+[33m30d2d9c[m fix: ajustar rutas y configuración de despliegue
+[33mf564b0c[m Add complete home page with CSS
+[33mf173280[m Add home template and configure templates directory
+[33m573f0b7[m fix: corregir variables de entorno y rutas para AURA
+[33m2242b5a[m fix: corregir vercel.json para plan hobby
+[33m79a6d13[m Configure Django for Vercel deployment
+[33m7a51abe[m Recreate requirements.txt with correct encoding
+[33m65f7615[m Fix requirements.txt format
+[33mdfbdd4d[m Configure Django for Vercel deployment
+[33ma238a1b[m fix: corregir templates faltantes y estructura de tabs
+[33m9779004[m Merge branch 'main' of https://github.com/Kleiver-Torrealba/AURA-sistema-asistencia-virtual
+[33m5d6967b[m AURA terminando de arreglar detalles
+[33mb944f15[m Update README.md
+[33m216da2c[m Rename README.txt to README.md
+[33mef8ae7e[m Aura: version beta
+[33m976cf5a[m Primer commit: Dashboard AURA y página de contacto
+[33madcd1e9[m Initial commit - Sistema de Asistencia UJAP con Dashboard
+[33m4ab9449[m fix: eliminar credenciales hardcodeadas
+[33mfe756bc[m primer commit - sistema de recuperacion de contrasena
+[33m5cff1cf[m agrego recuperacion de contrasena y favicon
+[33mb4ed807[m backend-pagina
+[33m6be2c4e[m Subiendo front-end y lógica de mensajes UJAP
